@@ -5,7 +5,10 @@ nibabel
 ninja
 pyyaml
 scikit-learn
-open3d==0.10.0
+torch
+torchvision
+torchaudio
+open3d
 numpy==1.22.3
 scipy==1.5.0
 tensorboard==2.0.0
