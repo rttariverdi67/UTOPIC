@@ -53,7 +53,7 @@ def eval_model(model, dataloader, eval_epoch=None, metric_is_save=False, save_fi
         points_src, points_ref = [_.cuda() for _ in inputs['points']]
         num_src, num_ref = [_.cuda() for _ in inputs['num']]
         perm_mat = inputs['perm_mat_gt'].cuda()
-        transform_gt, _ = [_.cuda() for _ in inputs['transform_gt']]
+        transform_gt = inputs['transform_gt'].cuda()
         src_overlap_gt, ref_overlap_gt = [_.cuda() for _ in inputs['overlap_gt']]
         points_src_raw = inputs['points_src_raw'].cuda()
         points_ref_raw = inputs['points_ref_raw'].cuda()
@@ -73,6 +73,11 @@ def eval_model(model, dataloader, eval_epoch=None, metric_is_save=False, save_fi
                                     overlap_pred, overlap_gt, points_src_raw, points_ref_raw,
                                     data_dict['coarse_src'], data_dict['fine_src'],
                                     data_dict['coarse_ref'], data_dict['fine_ref'], data_dict['prob'])
+
+            eval_loss = loss_item['perm_loss'] + loss_item['overlap_loss'] \
+                       + 1 * loss_item['c_s_cd_loss'] + 1 * loss_item['c_r_cd_loss'] \
+                       + 1 * loss_item['f_s_cd_loss'] + 1 * loss_item['f_r_cd_loss'] \
+                       + 0.5 * loss_item['overlap_prob_loss'] + 0.1 * loss_item['kl_loss']
 
             s_perm_mat = lap_solver(data_dict['s_pred'], num_src, num_ref,
                                     data_dict['src_row_sum'], data_dict['ref_col_sum'])
@@ -95,17 +100,18 @@ def eval_model(model, dataloader, eval_epoch=None, metric_is_save=False, save_fi
         all_val_metrics_np['f_r_cd_loss'].append(np.repeat(loss_item['f_r_cd_loss'].item(), batch_cur_size))
         all_val_metrics_np['overlap_prob_loss'].append(np.repeat(loss_item['overlap_prob_loss'].item(), batch_cur_size))
         all_val_metrics_np['kl_loss'].append(np.repeat(loss_item['kl_loss'].item(), batch_cur_size))
+        all_val_metrics_np['epoch_loss'].append(np.repeat(eval_loss.item(), batch_cur_size))
         all_val_metrics_np['label'].append(Label)
         all_val_metrics_np['infertime'].append(np.repeat(infer_time / batch_cur_size, batch_cur_size))
 
     all_val_metrics_np = {k: np.concatenate(all_val_metrics_np[k]) for k in all_val_metrics_np}
     summary_metrics = summarize_metrics(all_val_metrics_np)
 
-    eval_log = '[Metric]'
-    for k in summary_metrics:
-        if k.endswith('loss') or k.startswith('acc'):
-            eval_log += ' Mean-' + k + ': {:.4f}'.format(summary_metrics[k])
-    print(eval_log)
+    # eval_log = '[Metric]'
+    # for k in summary_metrics:
+    #     if k.endswith('loss') or k.startswith('acc'):
+    #         eval_log += ' Mean-' + k + ': {:.4f}'.format(summary_metrics[k])
+    # print(eval_log)
 
     print_metrics(summary_metrics)
     if metric_is_save:
@@ -130,9 +136,7 @@ if __name__ == '__main__':
         cfg_from_file(args.cfg_file)
 
     if len(cfg.MODEL_NAME) != 0 and len(cfg.DATASET_NAME) != 0:
-        out_path = get_output_dir(cfg.MODEL_NAME,
-                                  cfg.DATASET_NAME + ('_Unseen_' if cfg.DATASET.UNSEEN else '_Seen_') +
-                                  cfg.DATASET.NOISE_TYPE + ('_' + str(cfg.DATASET.PARTIAL_P_KEEP[0])))
+        out_path = get_output_dir(cfg.MODEL_NAME + '_' ,cfg.DATASET_FULL_NAME)
         cfg_from_list(['OUTPUT_PATH', out_path])
     assert len(cfg.OUTPUT_PATH) != 0, 'Invalid OUTPUT_PATH! Make sure model name and dataset name are specified.'
     if not Path(cfg.OUTPUT_PATH).exists():
@@ -142,13 +146,7 @@ if __name__ == '__main__':
 
     torch.manual_seed(cfg.RANDOM_SEED)
 
-    pc_dataset = get_datasets(partition='test',
-                              num_points=cfg.DATASET.POINT_NUM,
-                              unseen=cfg.DATASET.UNSEEN,
-                              noise_type=cfg.DATASET.NOISE_TYPE,
-                              rot_mag=cfg.DATASET.ROT_MAG,
-                              trans_mag=cfg.DATASET.TRANS_MAG,
-                              partial_p_keep=cfg.DATASET.PARTIAL_P_KEEP)
+    pc_dataset = get_datasets(partition='test')
 
     dataloader = get_dataloader(pc_dataset, phase='test')
 
