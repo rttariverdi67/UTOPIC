@@ -8,12 +8,14 @@ cfg = __C
 __C.DATASET = edict()
 __C.DATASET.TRAIN_BATCH_SIZE = 4
 __C.DATASET.TEST_BATCH_SIZE = 1
-__C.DATASET.POINT_NUM = 1024
-__C.DATASET.UNSEEN = False
-__C.DATASET.NOISE_TYPE = 'clean'
-__C.DATASET.ROT_MAG = 45.0
-__C.DATASET.TRANS_MAG = 0.5
-__C.DATASET.PARTIAL_P_KEEP = [0.7, 0.7]
+__C.DATASET.POINT_NUM = 512
+# __C.DATASET.UNSEEN = False
+# __C.DATASET.NOISE_TYPE = 'clean'
+# __C.DATASET.ROT_MAG = 45.0
+# __C.DATASET.TRANS_MAG = 0.5
+# __C.DATASET.PARTIAL_P_KEEP = [0.7, 0.7]
+__C.DATASET.ROOT = '/home/rahim/personal/patata/datasets/waymo_flow/raw_data_directory/dummy_tfs/dummy_out/waymo_npy_updated'
+
 
 # Model options
 __C.MODEL = edict()
@@ -23,8 +25,8 @@ __C.MODEL.SKADDCR = False
 
 # Model name and dataset name
 __C.MODEL_NAME = 'UTOPIC'
-__C.DATASET_NAME = 'ModelNet40'
-__C.DATASET_FULL_NAME = 'modelnet40_2048'
+__C.DATASET_NAME = 'WaymoFlow'
+__C.DATASET_FULL_NAME = 'WaymoFlow_512'
 
 # Output path (for checkpoints, running logs and visualization results)
 __C.OUTPUT_PATH = ''
