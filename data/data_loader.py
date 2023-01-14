@@ -2,200 +2,106 @@
 # -*- coding: utf-8 -*-
 
 
-import os
+import os.path as osp
 import glob
-import h5py
 import torch
 import numpy as np
 from typing import List
 import torch.nn.functional as F
 from torch.utils.data import Dataset
-import torchvision
+from scipy.spatial import cKDTree
 
 import data.data_transform as Transforms
 from utils.config import cfg
 
+shufflepoints = Transforms.ShufflePoints()
 
-def download():
-    DATA_DIR = os.path.dirname(os.path.abspath(__file__))
-    if not os.path.exists(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048')):
-        www = 'https://shapenet.cs.stanford.edu/media/modelnet40_ply_hdf5_2048.zip'
-        zipfile = os.path.basename(www)
-        os.system('wget %s; unzip %s' % (www + ' --no-check-certificate', zipfile))
-        os.system('mv %s %s' % (zipfile[:-4], DATA_DIR))
-        os.system('rm %s' % (zipfile))
-
-
-def load_data(partition):
-    # download()
-    DATA_DIR = os.path.dirname(os.path.abspath(__file__))
-    all_data = []
-    all_label = []
-    for h5_name in sorted(glob.glob(os.path.join(DATA_DIR, 'modelnet40_ply_hdf5_2048', 'ply_data_%s*.h5' % partition))):
-        f = h5py.File(h5_name, 'r')
-        data = np.concatenate([f['data'][:], f['normal'][:]], axis=-1)
-        label = f['label'][:].astype('int64')
-        f.close()
-        all_data.append(data)
-        all_label.append(label)
-    all_data = np.concatenate(all_data, axis=0)
-    all_label = np.concatenate(all_label, axis=0)
-    return all_data, all_label
-
-
-def get_transforms(partition: str, num_points: int = 1024,
-                   noise_type: str = 'clean', rot_mag: float = 45.0,
-                   trans_mag: float = 0.5, partial_p_keep: List = None):
-    """Get the list of transformation to be used for training or evaluating RegNet
-
-    Args:
-        noise_type: Either 'clean', 'jitter', 'crop'.
-          Depending on the option, some of the subsequent arguments may be ignored.
-        rot_mag: Magnitude of rotation perturbation to apply to source, in degrees.
-          Default: 45.0 (same as Deep Closest Point)
-        trans_mag: Magnitude of translation perturbation to apply to source.
-          Default: 0.5 (same as Deep Closest Point)
-        num_points: Number of points to uniformly resample to.
-          Note that this is with respect to the full point cloud. The number of
-          points will be proportionally less if cropped
-        partial_p_keep: Proportion to keep during cropping, [src_p, ref_p]
-          Default: [0.7, 0.7], i.e. Crop both source and reference to ~70%
-
-    Returns:
-        train_transforms, test_transforms: Both contain list of transformations to be applied
-    """
-
-    partial_p_keep = partial_p_keep if partial_p_keep is not None else [0.7, 0.7]
-
-    if noise_type == "clean":
-        # 1-1 correspondence for each point (resample first before splitting), no noise
-        if partition == 'train':
-            transforms = [Transforms.Resampler(num_points),
-                          Transforms.SplitSourceRef(),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.ShufflePoints()]
-        else:
-            transforms = [Transforms.SetDeterministic(),
-                          Transforms.Resampler(num_points),
-                          Transforms.SplitSourceRef(),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.ShufflePoints()]
-
-    elif noise_type == "jitter":
-        # Points randomly sampled (might not have perfect correspondence), gaussian noise to position
-        if partition == 'train':
-            transforms = [Transforms.SetJitterFlag(),
-                          Transforms.SplitSourceRef(),
-                          Transforms.Resampler(num_points),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.RandomJitter(),
-                          Transforms.ShufflePoints()]
-        else:
-            transforms = [Transforms.SetJitterFlag(),
-                          Transforms.SetDeterministic(),
-                          Transforms.SplitSourceRef(),
-                          Transforms.Resampler(num_points),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.RandomJitter(),
-                          Transforms.ShufflePoints()]
-
-    elif noise_type == "crop":
-        # Both source and reference point clouds cropped, plus same noise in "jitter"
-        if partition == 'train':
-            transforms = [Transforms.SetCropFlag(),
-                          Transforms.SplitSourceRef(),
-                          Transforms.Resampler(num_points),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.RandomCrop(partial_p_keep),
-                          Transforms.RandomJitter(),
-                          Transforms.ShufflePoints()]
-        else:
-            transforms = [Transforms.SetCropFlag(),
-                          Transforms.SetDeterministic(),
-                          Transforms.SplitSourceRef(),
-                          Transforms.Resampler(num_points),
-                          Transforms.RandomTransformSE3_euler(rot_mag=rot_mag, trans_mag=trans_mag),
-                          Transforms.RandomCrop(partial_p_keep),
-                          Transforms.RandomJitter(),
-                          Transforms.ShufflePoints()]
-    else:
-        raise NotImplementedError
-
-    return transforms
-
-
-class ModelNet40(Dataset):
-    def __init__(self, partition='train', unseen=False, transform=None, crossval=False, train_part=False,
-                 proportion=0.8):
-        # data_shape:[B, N, 3]
-        self.data, self.label = load_data(partition)
-        if unseen and partition == 'train' and train_part is False:
-            self.data, self.label = load_data('test')
+class WaymoFlow(Dataset):
+    def __init__(self, dataset_root, num_points=1024, partition='train'):
+        self.dataset_root = dataset_root
+        self.num_points = num_points
         self.partition = partition
-        self.unseen = unseen
-        self.label = self.label.squeeze()
-        self.transform = transform
-        self.crossval = crossval
-        self.train_part = train_part
-        if self.unseen:
-            # simulate training on first 20 categories while testing on last 20 categories
-            if self.partition == 'test':
-                self.data = self.data[self.label >= 20]
-                self.label = self.label[self.label >= 20]
-            elif self.partition == 'train':
-                if self.train_part:
-                    self.data = self.data[self.label < 20]
-                    self.label = self.label[self.label < 20]
-                else:
-                    self.data = self.data[self.label < 20]
-                    self.label = self.label[self.label < 20]
+
+        import pickle
+        if osp.exists('data_list'+f'_{self.partition}'):
+            with open ('data_list'+f'_{self.partition}', 'rb') as fp:
+                self.data_list = pickle.load(fp)
         else:
-            if self.crossval:
-                if self.train_part:
-                    self.data = self.data[0:int(self.label.shape[0] * proportion)]
-                    self.label = self.label[0:int(self.label.shape[0] * proportion)]
-                else:
-                    self.data = self.data[int(self.label.shape[0] * proportion):-1]
-                    self.label = self.label[int(self.label.shape[0] * proportion):-1]
+            self.data_list = sorted(glob.glob(osp.join(self.dataset_root, self.partition) + '/previous/**/*.npy'))
+            with open('data_list'+f'_{self.partition}', 'wb') as fp:
+                pickle.dump(self.data_list, fp)
+
+
+    def get_data_label(self, data_name):
+
+
+        if 'TYPE_VEHICLE' in data_name:
+            label = 1
+        elif 'TYPE_PEDESTRIAN' in data_name:
+            label = 2
+        elif 'TYPE_SIGN' in data_name:
+            label = 3
+        return label
+
+
+
+    def load_data(self, index):
+        ref_frame = self.data_list[index]
+        src_frame = self.data_list[index].replace('previous', 'current')
+        transform = self.data_list[index].replace('previous', 'gt_poses')
+        ref_frame = np.load(ref_frame)
+        src_frame = np.load(src_frame)
+        transform = np.load(transform)
+        label = self.get_data_label(self.data_list[index])
+        return ref_frame, src_frame, transform, label
 
     def __getitem__(self, item):
-        sample = {'points': self.data[item, :, :3], 'label': self.label[item], 'idx': np.array(item, dtype=np.int32)}
+        points_ref_raw, points_src_raw, transform_gt, label = self.load_data(item)
 
-        if self.transform:
-            sample = self.transform(sample)
+        indices_ref = np.random.choice(points_ref_raw.shape[0], self.num_points, replace=True)
+        indices_src = np.random.choice(points_src_raw.shape[0], self.num_points, replace=True)
+
+        points_ref, points_src = points_ref_raw[indices_ref], points_src_raw[indices_src]
+
+        sample = {
+            'points_src_raw':points_src_raw,
+            'points_ref_raw':points_ref_raw,
+            'points_src':points_src, 
+            'points_ref':points_ref, 
+            'label': np.array(label, dtype=np.float32), 
+            'idx': np.array(item, dtype=np.float32),
+            'transform_gt': np.array(transform_gt, dtype=np.float32)
+            }
+
+        sample = shufflepoints(sample)
+ 
         transform_gt = sample['transform_gt']
-        transform_igt = np.concatenate(
-            (transform_gt[:, :3].T, np.expand_dims(-(transform_gt[:, :3].T).dot(transform_gt[:, 3]), axis=1)), axis=-1)
-        num_src, num_ref = sample['perm_mat'].shape
+        # num_src = len(points_src_raw)
+        # num_ref = len(points_ref_raw)
+        num_src = len(points_src)
+        num_ref = len(points_ref)
 
         ret_dict = {
             'points': [torch.Tensor(x) for x in [sample['points_src'], sample['points_ref']]],
             'num': [torch.tensor(x) for x in [num_src, num_ref]],
+            'transform_gt': torch.Tensor(transform_gt.astype('float32')),
             'perm_mat_gt': torch.tensor(sample['perm_mat'].astype('float32')),
-            'transform_gt': [torch.Tensor(x) for x in
-                             [transform_gt.astype('float32'), transform_igt.astype('float32')]],
             'overlap_gt': [torch.Tensor(x) for x in [sample['src_overlap_gt'], sample['ref_overlap_gt']]],
             'label': torch.tensor(sample['label']),
             'points_src_raw': torch.Tensor(sample['points_src_raw']),
             'points_ref_raw': torch.Tensor(sample['points_ref_raw'])
         }
+
         return ret_dict
 
     def __len__(self):
-        return self.data.shape[0]
+        return len(self.data_list)
 
 
-def get_datasets(partition='train', num_points=1024, unseen=False,
-                 noise_type="clean", rot_mag=45.0, trans_mag=0.5,
-                 partial_p_keep=[0.7, 0.7], crossval=False, train_part=False):
-    if cfg.DATASET_NAME == 'ModelNet40':
-        transforms = get_transforms(partition=partition, num_points=num_points, noise_type=noise_type,
-                                    rot_mag=rot_mag, trans_mag=trans_mag, partial_p_keep=partial_p_keep)
-        transforms = torchvision.transforms.Compose(transforms)
-        datasets = ModelNet40(partition, unseen, transforms, crossval=crossval, train_part=train_part)
-    else:
-        print('please input ModelNet40')
-
+def get_datasets(partition='train'):
+    dataset_root = cfg.DATASET.ROOT
+    num_points = cfg.DATASET.POINT_NUM
+    datasets = WaymoFlow(dataset_root, num_points, partition)
     return datasets
 
 
