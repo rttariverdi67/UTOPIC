@@ -21,7 +21,24 @@ from utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from utils.dup_stdout_manager import DupStdoutFileManager
 from utils.print_easydict import print_easydict
 
-writer = None
+import time
+import wandb
+from collections import OrderedDict
+wandb.login
+
+from easydict import EasyDict as edict
+def get_logs(metrics):
+
+    _logs=edict()
+    _logs.acc_gt = metrics['acc_gt']
+    _logs.r_rmse = metrics['r_rmse']
+    _logs.t_rmse = metrics['t_rmse']
+    _logs.r_mae = metrics['r_mae']
+    _logs.t_mae = metrics['t_mae']
+    _logs.err_r_deg_mean = metrics['err_r_deg_mean']
+    _logs.err_t_mean = metrics['err_t_mean']
+    _logs.loss = metrics['epoch_loss']
+    return _logs
 
 
 def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, resume=False, start_epoch=0):
@@ -29,6 +46,12 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
     print('Start training...')
     dataset_size = len(dataloader['train'].dataset)
     print('train datasize: {}'.format(dataset_size))
+
+    wandb.init(
+        project="utopic", entity="motion-prediction", 
+        name=f"exp_{str(datetime.now())}", 
+        config=cfg)
+
 
     since = time.time()
     lap_solver = hungarian
@@ -74,7 +97,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
             points_src, points_ref = [_.cuda() for _ in inputs['points']]
             num_src, num_ref = [_.cuda() for _ in inputs['num']]
             perm_mat = inputs['perm_mat_gt'].cuda()
-            transform_gt, _ = [_.cuda() for _ in inputs['transform_gt']]
+            transform_gt = inputs['transform_gt'].cuda()
             src_overlap_gt, ref_overlap_gt = [_.cuda() for _ in inputs['overlap_gt']]
             points_src_raw = inputs['points_src_raw'].cuda()
             points_ref_raw = inputs['points_ref_raw'].cuda()
@@ -123,6 +146,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
                 all_train_metrics_np['f_s_cd_loss'].append(np.repeat(loss_item['f_s_cd_loss'].item(), batch_cur_size))
                 all_train_metrics_np['c_r_cd_loss'].append(np.repeat(loss_item['c_r_cd_loss'].item(), batch_cur_size))
                 all_train_metrics_np['f_r_cd_loss'].append(np.repeat(loss_item['f_r_cd_loss'].item(), batch_cur_size))
+                all_train_metrics_np['epoch_loss'].append(np.repeat(loss.item(), batch_cur_size))
                 all_train_metrics_np['overlap_prob_loss'].append(
                     np.repeat(loss_item['overlap_prob_loss'].item(), batch_cur_size))
                 all_train_metrics_np['kl_loss'].append(np.repeat(loss_item['kl_loss'].item(), batch_cur_size))
@@ -135,16 +159,14 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
                         if k.endswith('loss') or k.startswith('acc'):
                             iter_log += ' || ' + k + ': {:.4f}'.format(
                                 np.mean(np.concatenate(all_train_metrics_np[k])[-cfg.STATISTIC_STEP * batch_cur_size:]))
-                    print(iter_log)
 
         all_train_metrics_np = {k: np.concatenate(all_train_metrics_np[k]) for k in all_train_metrics_np}
         summary_metrics = summarize_metrics(all_train_metrics_np)
-
+        
         epoch_log = 'Epoch: {:<4}'.format(epoch)
         for k in summary_metrics:
             if k.endswith('loss') or k.startswith('acc'):
                 epoch_log += ' Mean-' + k + ': {:.4f}'.format(summary_metrics[k])
-        print(epoch_log)
 
         print_metrics(summary_metrics)
 
@@ -155,28 +177,15 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
             'optim': optimizer.state_dict(),
             'loss': loss
         }, save_path)
-
-        for k in summary_metrics:
-            if k.endswith('loss'):
-                writer.add_scalar('train-loss/' + k, summary_metrics[k], epoch)
-        writer.add_scalar('train/acc', summary_metrics['acc_gt'], epoch)
-        writer.add_scalar('train/r_rmse', summary_metrics['r_rmse'], epoch)
-        writer.add_scalar('train/t_rmse', summary_metrics['t_rmse'], epoch)
-        writer.add_scalar('train/r_mae', summary_metrics['r_mae'], epoch)
-        writer.add_scalar('train/t_mae', summary_metrics['t_mae'], epoch)
-        writer.add_scalar('train/err_r_deg_mean', summary_metrics['err_r_deg_mean'], epoch)
-        writer.add_scalar('train/err_t_mean', summary_metrics['err_t_mean'], epoch)
+        train_logs = get_logs(summary_metrics)
+        wand_dict_train = OrderedDict([('train/'+key, value) for key, value in train_logs.items()])
+        wandb.log(wand_dict_train)
 
         # Eval in each epoch
         val_metrics = eval_model(model, dataloader['val'])
-
-        writer.add_scalar('val/acc', val_metrics['acc_gt'], epoch)
-        writer.add_scalar('val/r_rmse', val_metrics['r_rmse'], epoch)
-        writer.add_scalar('val/t_rmse', val_metrics['t_rmse'], epoch)
-        writer.add_scalar('val/r_mae', val_metrics['r_mae'], epoch)
-        writer.add_scalar('val/t_mae', val_metrics['t_mae'], epoch)
-        writer.add_scalar('val/err_r_deg_mean', val_metrics['err_r_deg_mean'], epoch)
-        writer.add_scalar('val/err_t_mean', val_metrics['err_t_mean'], epoch)
+        val_logs = get_logs(val_metrics)
+        wand_dict_val = OrderedDict([('val/'+key, value) for key, value in val_logs.items()])
+        wandb.log(wand_dict_val)
 
         if optimal_acc < val_metrics['acc_gt']:
             optimal_acc = val_metrics['acc_gt']
@@ -220,39 +229,20 @@ if __name__ == '__main__':
         cfg_from_file(args.cfg_file)
 
     if len(cfg.MODEL_NAME) != 0 and len(cfg.DATASET_NAME) != 0:
-        out_path = get_output_dir(cfg.MODEL_NAME,
-                                  cfg.DATASET_NAME + ('_Unseen_' if cfg.DATASET.UNSEEN else '_Seen_') +
-                                  cfg.DATASET.NOISE_TYPE + ('_' + str(cfg.DATASET.PARTIAL_P_KEEP[0])))
+        out_path = get_output_dir(cfg.MODEL_NAME + '_' ,cfg.DATASET_FULL_NAME)
         cfg_from_list(['OUTPUT_PATH', out_path])
     assert len(cfg.OUTPUT_PATH) != 0, 'Invalid OUTPUT_PATH! Make sure model name and dataset name are specified.'
     if not Path(cfg.OUTPUT_PATH).exists():
         Path(cfg.OUTPUT_PATH).mkdir(parents=True)
 
-    writer = SummaryWriter(log_dir=os.path.join(str(Path(cfg.OUTPUT_PATH)), 'tensorboard'))
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(cfg.GPU)
 
     torch.manual_seed(cfg.RANDOM_SEED)
 
     pc_dataset = {}
-    pc_dataset['train'] = get_datasets(partition='train',
-                                       num_points=cfg.DATASET.POINT_NUM,
-                                       unseen=cfg.DATASET.UNSEEN,
-                                       noise_type=cfg.DATASET.NOISE_TYPE,
-                                       rot_mag=cfg.DATASET.ROT_MAG,
-                                       trans_mag=cfg.DATASET.TRANS_MAG,
-                                       partial_p_keep=cfg.DATASET.PARTIAL_P_KEEP,
-                                       crossval=True,
-                                       train_part=True)
-    pc_dataset['val'] = get_datasets(partition='train',
-                                     num_points=cfg.DATASET.POINT_NUM,
-                                     unseen=cfg.DATASET.UNSEEN,
-                                     noise_type=cfg.DATASET.NOISE_TYPE,
-                                     rot_mag=cfg.DATASET.ROT_MAG,
-                                     trans_mag=cfg.DATASET.TRANS_MAG,
-                                     partial_p_keep=cfg.DATASET.PARTIAL_P_KEEP,
-                                     crossval=True,
-                                     train_part=False)
+    pc_dataset['train'] = get_datasets(partition='train')
+    pc_dataset['val'] = get_datasets(partition='train')
 
     dataloader = {x: get_dataloader(pc_dataset[x], shuffle=(x == 'train'), phase=x) for x in ('train', 'val')}
 
