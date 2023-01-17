@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 import data.data_transform as Transforms
 from utils.config import cfg
 
-shufflepoints = Transforms.ShufflePoints()
+shufflepoints = Transforms.ShufflePoints(num=cfg.POINT_NUM)
 
 class WaymoFlow(Dataset):
     def __init__(self, dataset_root, num_points=1024, partition='train'):
@@ -58,16 +58,16 @@ class WaymoFlow(Dataset):
     def __getitem__(self, item):
         points_ref_raw, points_src_raw, transform_gt, label = self.load_data(item)
 
-        indices_ref = np.random.choice(points_ref_raw.shape[0], self.num_points, replace=True)
-        indices_src = np.random.choice(points_src_raw.shape[0], self.num_points, replace=True)
+        # indices_ref = np.random.choice(points_ref_raw.shape[0], self.num_points, replace=True)
+        # indices_src = np.random.choice(points_src_raw.shape[0], self.num_points, replace=True)
 
-        points_ref, points_src = points_ref_raw[indices_ref], points_src_raw[indices_src]
+        # points_ref, points_src = points_ref_raw[indices_ref], points_src_raw[indices_src]
 
         sample = {
             'points_src_raw':points_src_raw,
             'points_ref_raw':points_ref_raw,
-            'points_src':points_src, 
-            'points_ref':points_ref, 
+            # 'points_src':points_src, 
+            # 'points_ref':points_ref, 
             'label': np.array(label, dtype=np.float32), 
             'idx': np.array(item, dtype=np.float32),
             'transform_gt': np.array(transform_gt, dtype=np.float32)

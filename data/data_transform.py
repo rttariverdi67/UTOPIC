@@ -368,6 +368,9 @@ def nearest_neighbor(src, dst):
 class ShufflePoints:
     """Shuffles the order of the points"""
 
+    def __init__(self, num: int):
+        self.num = num
+
     def __call__(self, sample):
         if 'points' in sample:
             sample['points'] = np.random.permutation(sample['points'])
@@ -438,7 +441,24 @@ class ShufflePoints:
                 sample['src_overlap_gt'] = np.ones((sample['points_src'].shape[0], 1))
                 sample['ref_overlap_gt'] = np.ones((sample['points_ref'].shape[0], 1))
 
+            sample['points_src'] = self._resample(sample['points_src_raw'], self.num)
+            sample['points_ref'] = self._resample(sample['points_ref_raw'], self.num)
+
         return sample
+
+    @staticmethod
+    def _resample(points, k):
+
+        if k <= points.shape[0]:
+            rand_idxs = np.random.choice(points.shape[0], k, replace=False)
+            return points[rand_idxs, :]
+        elif points.shape[0] == k:
+
+            return points
+        else:
+            rand_idxs = np.concatenate([np.random.choice(points.shape[0], points.shape[0], replace=False),
+                                        np.random.choice(points.shape[0], k - points.shape[0], replace=True)])
+            return points[rand_idxs, :]
 
 
 class SetDeterministic:
