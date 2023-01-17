@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 import data.data_transform as Transforms
 from utils.config import cfg
 
-shufflepoints = Transforms.ShufflePoints(num=cfg.POINT_NUM)
+shufflepoints = Transforms.ShufflePoints(num=cfg.DATASET.POINT_NUM)
 
 class WaymoFlow(Dataset):
     def __init__(self, dataset_root, num_points=1024, partition='train'):
