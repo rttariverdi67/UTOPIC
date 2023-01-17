@@ -76,10 +76,10 @@ class WaymoFlow(Dataset):
         sample = shufflepoints(sample)
  
         transform_gt = sample['transform_gt']
-        # num_src = len(points_src_raw)
-        # num_ref = len(points_ref_raw)
-        num_src = len(points_src)
-        num_ref = len(points_ref)
+        num_src = len(points_src_raw)
+        num_ref = len(points_ref_raw)
+        # num_src = len(points_src)
+        # num_ref = len(points_ref)
 
         ret_dict = {
             'points': [torch.Tensor(x) for x in [sample['points_src'], sample['points_ref']]],
