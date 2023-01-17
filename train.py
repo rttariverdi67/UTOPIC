@@ -1,32 +1,32 @@
+import argparse
 import os
 import time
-import argparse
-import numpy as np
+from collections import OrderedDict, defaultdict
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
 
+import numpy as np
 import torch
 import torch.optim as optim
+from easydict import EasyDict as edict
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
-from data.data_loader import get_datasets, get_dataloader
+import wandb
+from data.data_loader import get_dataloader, get_datasets
 from eval import eval_model
 from models.architecture import PipeLine
-
-from utils.loss_func import OverallLoss
-from utils.evaluation_metric import matching_accuracy, compute_metrics, summarize_metrics, print_metrics
-from utils.hungarian import hungarian
 from utils.config import cfg, cfg_from_file, cfg_from_list, get_output_dir
 from utils.dup_stdout_manager import DupStdoutFileManager
+from utils.evaluation_metric import (compute_metrics, matching_accuracy,
+                                     print_metrics, summarize_metrics)
+from utils.hungarian import hungarian
+from utils.loss_func import OverallLoss
 from utils.print_easydict import print_easydict
 
-import time
-import wandb
-from collections import OrderedDict
 wandb.login
 
-from easydict import EasyDict as edict
+
 def get_logs(metrics):
 
     _logs=edict()
@@ -93,7 +93,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
         iter_num = 0
         all_train_metrics_np = defaultdict(list)
 
-        for inputs in dataloader['train']:
+        for inputs in tqdm(dataloader['train']):
             points_src, points_ref = [_.cuda() for _ in inputs['points']]
             num_src, num_ref = [_.cuda() for _ in inputs['num']]
             perm_mat = inputs['perm_mat_gt'].cuda()

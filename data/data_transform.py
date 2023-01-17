@@ -372,6 +372,8 @@ class ShufflePoints:
         self.num = num
 
     def __call__(self, sample):
+        sample['points_src'] = self._resample(sample['points_src_raw'], self.num)
+        sample['points_ref'] = self._resample(sample['points_ref_raw'], self.num)
         if 'points' in sample:
             sample['points'] = np.random.permutation(sample['points'])
         else:
@@ -441,8 +443,6 @@ class ShufflePoints:
                 sample['src_overlap_gt'] = np.ones((sample['points_src'].shape[0], 1))
                 sample['ref_overlap_gt'] = np.ones((sample['points_ref'].shape[0], 1))
 
-            sample['points_src'] = self._resample(sample['points_src_raw'], self.num)
-            sample['points_ref'] = self._resample(sample['points_ref_raw'], self.num)
 
         return sample
 
