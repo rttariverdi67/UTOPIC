@@ -227,7 +227,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Point could registration training & evaluation code.')
     parser.add_argument('--cfg', dest='cfg_file', help='an optional config file',
-                        default='experiments/UTOPIC_Unseen_CropRPM_0.7_modelnet40.yaml', type=str)
+                        default='experiments/UTOPIC_waymo.yaml', type=str)
 
     args = parser.parse_args()
 
