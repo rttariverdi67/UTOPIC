@@ -29,7 +29,7 @@ __C.DATASET_NAME = 'WaymoFlow'
 __C.DATASET_FULL_NAME = 'WaymoFlow_512'
 
 # Output path (for checkpoints, running logs and visualization results)
-__C.OUTPUT_PATH = ''
+__C.OUTPUT_PATH = '/home/rahim/personal/patata/PersonalFarid/rahim_dir/utopic_files'
 
 # num of dataloader processes
 __C.DATALOADER_NUM = 0
