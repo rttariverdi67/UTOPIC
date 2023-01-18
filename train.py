@@ -30,14 +30,20 @@ wandb.login
 def get_logs(metrics):
 
     _logs=edict()
-    _logs.acc_gt = metrics['acc_gt']
-    _logs.r_rmse = metrics['r_rmse']
-    _logs.t_rmse = metrics['t_rmse']
-    _logs.r_mae = metrics['r_mae']
-    _logs.t_mae = metrics['t_mae']
-    _logs.err_r_deg_mean = metrics['err_r_deg_mean']
+    #Translation error
     _logs.err_t_mean = metrics['err_t_mean']
+    _logs.err_t_rmse = metrics['err_t_rmse']
+    #Rotation error
+    _logs.err_r_deg_mean = metrics['err_r_deg_mean']
+    _logs.err_r_deg_rmse = metrics['err_r_deg_rmse']
+    #loss
     _logs.loss = metrics['epoch_loss']
+    # #DeepCP metrics
+    # _logs.r_rmse = metrics['r_rmse']
+    # _logs.r_mae = metrics['r_mae']
+    # _logs.t_rmse = metrics['t_rmse']
+    # _logs.t_mae = metrics['t_mae']
+
     return _logs
 
 
@@ -159,6 +165,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
                         if k.endswith('loss') or k.startswith('acc'):
                             iter_log += ' || ' + k + ': {:.4f}'.format(
                                 np.mean(np.concatenate(all_train_metrics_np[k])[-cfg.STATISTIC_STEP * batch_cur_size:]))
+                    print(iter_log)
 
         all_train_metrics_np = {k: np.concatenate(all_train_metrics_np[k]) for k in all_train_metrics_np}
         summary_metrics = summarize_metrics(all_train_metrics_np)
