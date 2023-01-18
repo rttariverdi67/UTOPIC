@@ -3,14 +3,11 @@ DATASET:
   TRAIN_BATCH_SIZE: 4
   TEST_BATCH_SIZE: 1
   POINT_NUM: 512
-  # UNSEEN: True
-  # # NOISE_TYPE: crop  #clean, jitter, crop
-  # ROT_MAG: 45.0
-  # TRANS_MAG: 0.5
   ROOT: /home/rahim/personal/patata/datasets/waymo_flow/raw_data_directory/dummy_tfs/dummy_out/waymo_npy_updated
-  # PARTIAL_P_KEEP:
-  #   - 0.5
-  #   - 0.5
+
+
+# Output path (for checkpoints, running logs and visualization results)
+OUTPUT_PATH: /home/rahim/personal/patata/PersonalFarid/rahim_dir/utopic_files
 
 # Model parameters
 MODEL:
