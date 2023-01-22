@@ -62,11 +62,11 @@ class WaymoFlow(Dataset):
 
 
         if 'TYPE_VEHICLE' in data_name:
-            label = 1
+            label = np.array([1])
         elif 'TYPE_PEDESTRIAN' in data_name:
-            label = 2
+            label = np.array([2])
         elif 'TYPE_SIGN' in data_name:
-            label = 3
+            label = np.array([3])
         return label
 
 
@@ -189,5 +189,5 @@ def get_dataloader(dataset, phase, shuffle=False):
         batch_size = cfg.DATASET.TRAIN_BATCH_SIZE
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                        shuffle=shuffle, num_workers=cfg.DATALOADER_NUM,
-                                    #    collate_fn=collate_fn, 
+                                       collate_fn=collate_fn, 
                                        pin_memory=False)
