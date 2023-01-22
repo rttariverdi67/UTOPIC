@@ -127,7 +127,7 @@ def eval_model(model, dataloader, eval_epoch=None, metric_is_save=False, save_fi
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Point could registration evaluation code.')
     parser.add_argument('--cfg', dest='cfg_file', help='an optional config file',
-                        default='experiments/UTOPIC_Unseen_CropRPM_0.7_modelnet40.yaml', type=str)
+                        default='experiments/UTOPIC_waymo.yaml', type=str)
 
     args = parser.parse_args()
 
