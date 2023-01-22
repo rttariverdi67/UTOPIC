@@ -39,24 +39,13 @@ class Resampler:
 
         if 'deterministic' in sample and sample['deterministic']:
             np.random.seed(sample['idx'])
-
-        if 'points' in sample:
-            sample['points'] = self._resample(sample['points'], self.num)
+        if 'crop_proportion' not in sample:
+            src_size, ref_size = self.num, self.num
         else:
-            if 'crop_proportion' not in sample:
-                src_size, ref_size = self.num, self.num
-            elif len(sample['crop_proportion']) == 1:
-                src_size = math.ceil(sample['crop_proportion'][0] * self.num)
-                ref_size = self.num
-            elif len(sample['crop_proportion']) == 2:
-                src_size = math.ceil(sample['crop_proportion'][0] * self.num)
-                ref_size = math.ceil(sample['crop_proportion'][1] * self.num)
-            else:
-                raise ValueError('Crop proportion must have 1 or 2 elements')
+            raise ValueError('Crop proportion must have 1 or 2 elements')
 
-            
-            sample['points_src'] = self._resample(sample['points_src'], src_size)
-            sample['points_ref'] = self._resample(sample['points_ref'], ref_size)
+        sample['points_src'] = self._resample(sample['points_src_raw'], src_size)
+        sample['points_ref'] = self._resample(sample['points_ref_raw'], ref_size)
 
 
         return sample
