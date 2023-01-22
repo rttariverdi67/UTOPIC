@@ -3,6 +3,7 @@ DATASET:
   TRAIN_BATCH_SIZE: 4
   TEST_BATCH_SIZE: 1
   POINT_NUM: 512
+  NOISE_TYPE: clean
   ROOT: /home/rahim/personal/patata/datasets/waymo_flow/raw_data_directory/dummy_tfs/dummy_out/waymo_npy_updated
 
 
