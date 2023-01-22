@@ -13,14 +13,40 @@ from scipy.spatial import cKDTree
 
 import data.data_transform as Transforms
 from utils.config import cfg
+import torchvision
 
-shufflepoints = Transforms.ShufflePoints(num=cfg.DATASET.POINT_NUM)
+
+def get_transforms(partition: str, num_points: int = 1024,
+                   noise_type: str = 'clean',):
+    """Get the list of transformation to be used for training or evaluating RegNet
+    Args:
+        noise_type: Either 'clean', 'jitter', 'crop'.
+          Depending on the option, some of the subsequent arguments may be ignored.
+        num_points: Number of points to uniformly resample to.
+    Returns:
+        train_transforms, test_transforms: Both contain list of transformations to be applied
+    """
+
+
+    if noise_type == "clean":
+        # 1-1 correspondence for each point (resample first before splitting), no noise
+        if partition == 'train':
+            transforms = [Transforms.Resampler(num_points),
+                          Transforms.ShufflePoints()]
+        else:
+            transforms = [Transforms.SetDeterministic(),
+                          Transforms.Resampler(num_points),
+                          Transforms.ShufflePoints()]
+    else:
+        raise NotImplementedError
+
+    return transforms
 
 class WaymoFlow(Dataset):
-    def __init__(self, dataset_root, num_points=1024, partition='train'):
+    def __init__(self, dataset_root, transform=None, partition='train'):
         self.dataset_root = dataset_root
-        self.num_points = num_points
         self.partition = partition
+        self.transform = transform
 
         import pickle
         if osp.exists('data_list'+f'_{self.partition}'):
@@ -58,28 +84,19 @@ class WaymoFlow(Dataset):
     def __getitem__(self, item):
         points_ref_raw, points_src_raw, transform_gt, label = self.load_data(item)
 
-        # indices_ref = np.random.choice(points_ref_raw.shape[0], self.num_points, replace=True)
-        # indices_src = np.random.choice(points_src_raw.shape[0], self.num_points, replace=True)
-
-        # points_ref, points_src = points_ref_raw[indices_ref], points_src_raw[indices_src]
-
         sample = {
             'points_src_raw':points_src_raw,
             'points_ref_raw':points_ref_raw,
-            # 'points_src':points_src, 
-            # 'points_ref':points_ref, 
             'label': np.array(label, dtype=np.float32), 
             'idx': np.array(item, dtype=np.float32),
             'transform_gt': np.array(transform_gt, dtype=np.float32)
             }
+        if self.transform:
+            sample = self.transform(sample)
 
-        sample = shufflepoints(sample)
- 
         transform_gt = sample['transform_gt']
         num_src = len(points_src_raw)
         num_ref = len(points_ref_raw)
-        # num_src = len(points_src)
-        # num_ref = len(points_ref)
 
         ret_dict = {
             'points': [torch.Tensor(x) for x in [sample['points_src'], sample['points_ref']]],
@@ -98,10 +115,11 @@ class WaymoFlow(Dataset):
         return len(self.data_list)
 
 
-def get_datasets(partition='train'):
-    dataset_root = cfg.DATASET.ROOT
-    num_points = cfg.DATASET.POINT_NUM
-    datasets = WaymoFlow(dataset_root, num_points, partition)
+def get_datasets(dataset_root, partition='train', num_points=1024, noise_type="clean"):
+   
+    transforms = get_transforms(partition=partition, num_points=num_points, noise_type=noise_type)
+    transforms = torchvision.transforms.Compose(transforms)
+    datasets = WaymoFlow(dataset_root, transforms, partition)
     return datasets
 
 
@@ -171,4 +189,5 @@ def get_dataloader(dataset, phase, shuffle=False):
         batch_size = cfg.DATASET.TRAIN_BATCH_SIZE
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size,
                                        shuffle=shuffle, num_workers=cfg.DATALOADER_NUM,
-                                       collate_fn=collate_fn, pin_memory=False)
+                                    #    collate_fn=collate_fn, 
+                                       pin_memory=False)
