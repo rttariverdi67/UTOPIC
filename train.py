@@ -47,7 +47,7 @@ def get_logs(metrics):
     return _logs
 
 
-def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, resume=False, start_epoch=0):
+def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, resume=False, start_epoch=0, log=True):
     print('**************************************')
     print('Start training...')
     dataset_size = len(dataloader['train'].dataset)
@@ -55,7 +55,7 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
 
     wandb.init(
         project="utopic", entity="motion-prediction", 
-        name=f"exp_{str(datetime.now())}", 
+        name="rucula_multi_batch", 
         config=cfg)
 
 
@@ -208,8 +208,8 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
         writer_wandb.val.t_mae = val_metrics['t_mae']
         writer_wandb.val.err_r_deg_mean = val_metrics['err_r_deg_mean']
         writer_wandb.val.err_t_mean = val_metrics['err_t_mean']
-
-        wandb.log(writer_wandb)
+        if log:
+            wandb.log(writer_wandb)
 
         
         if optimal_acc < val_metrics['acc_gt']:
@@ -266,11 +266,11 @@ if __name__ == '__main__':
     torch.manual_seed(cfg.RANDOM_SEED)
 
     pc_dataset = {}
-    pc_dataset['train'] = get_datasets(dataset=cfg.DATASET.ROOT,
+    pc_dataset['train'] = get_datasets(dataset_root=cfg.DATASET.ROOT,
                                        partition='train',
                                        num_points=cfg.DATASET.POINT_NUM,
                                        noise_type=cfg.DATASET.NOISE_TYPE)
-    pc_dataset['val'] = get_datasets(dataset=cfg.DATASET.ROOT,
+    pc_dataset['val'] = get_datasets(dataset_root=cfg.DATASET.ROOT,
                                      partition='train',
                                      num_points=cfg.DATASET.POINT_NUM,
                                      noise_type=cfg.DATASET.NOISE_TYPE)
