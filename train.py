@@ -184,16 +184,34 @@ def train_eval_model(model, overallLoss, optimizer, dataloader, num_epochs=200, 
             'optim': optimizer.state_dict(),
             'loss': loss
         }, save_path)
-        train_logs = get_logs(summary_metrics)
-        wand_dict_train = OrderedDict([('train/'+key, value) for key, value in train_logs.items()])
-        wandb.log(wand_dict_train)
+        
+        writer_wandb=edict()
+
+        for k in summary_metrics:
+            if k.endswith('loss'):
+                writer_wandb.train_loss.k = summary_metrics[k]
+        writer_wandb.train.acc = summary_metrics['acc_gt']
+        writer_wandb.train.r_rmse = summary_metrics['r_rmse']
+        writer_wandb.train.t_rmse = summary_metrics['t_rmse']
+        writer_wandb.train.r_mae = summary_metrics['r_mae']
+        writer_wandb.train.t_mae = summary_metrics['t_mae']
+        writer_wandb.train.err_r_deg_mean = summary_metrics['err_r_deg_mean']
+        writer_wandb.train.err_t_mean = summary_metrics['err_t_mean']
 
         # Eval in each epoch
         val_metrics = eval_model(model, dataloader['val'])
-        val_logs = get_logs(val_metrics)
-        wand_dict_val = OrderedDict([('val/'+key, value) for key, value in val_logs.items()])
-        wandb.log(wand_dict_val)
 
+        writer_wandb.val.acc = val_metrics['acc_gt']
+        writer_wandb.val.r_rmse = val_metrics['r_rmse']
+        writer_wandb.val.t_rmse = val_metrics['t_rmse']
+        writer_wandb.val.r_mae = val_metrics['r_mae']
+        writer_wandb.val.t_mae = val_metrics['t_mae']
+        writer_wandb.val.err_r_deg_mean = val_metrics['err_r_deg_mean']
+        writer_wandb.val.err_t_mean = val_metrics['err_t_mean']
+
+        wandb.log(writer_wandb)
+
+        
         if optimal_acc < val_metrics['acc_gt']:
             optimal_acc = val_metrics['acc_gt']
             save_best_acc_pth = str(checkpoint_path / 'model_best_acc.pth'.format(epoch + 1))
@@ -236,7 +254,7 @@ if __name__ == '__main__':
         cfg_from_file(args.cfg_file)
 
     if len(cfg.MODEL_NAME) != 0 and len(cfg.DATASET_NAME) != 0:
-        out_path = get_output_dir(cfg.MODEL_NAME + '_' ,cfg.DATASET_FULL_NAME)
+        out_path = get_output_dir(os.path.join(cfg.OUTPUT_PATH, cfg.MODEL_NAME) ,cfg.DATASET_FULL_NAME)
         cfg_from_list(['OUTPUT_PATH', out_path])
     assert len(cfg.OUTPUT_PATH) != 0, 'Invalid OUTPUT_PATH! Make sure model name and dataset name are specified.'
     if not Path(cfg.OUTPUT_PATH).exists():
@@ -248,8 +266,14 @@ if __name__ == '__main__':
     torch.manual_seed(cfg.RANDOM_SEED)
 
     pc_dataset = {}
-    pc_dataset['train'] = get_datasets(partition='train')
-    pc_dataset['val'] = get_datasets(partition='train')
+    pc_dataset['train'] = get_datasets(dataset=cfg.DATASET.ROOT,
+                                       partition='train',
+                                       num_points=cfg.DATASET.POINT_NUM,
+                                       noise_type=cfg.DATASET.NOISE_TYPE)
+    pc_dataset['val'] = get_datasets(dataset=cfg.DATASET.ROOT,
+                                     partition='train',
+                                     num_points=cfg.DATASET.POINT_NUM,
+                                     noise_type=cfg.DATASET.NOISE_TYPE)
 
     dataloader = {x: get_dataloader(pc_dataset[x], shuffle=(x == 'train'), phase=x) for x in ('train', 'val')}
 
